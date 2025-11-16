@@ -2,7 +2,11 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
-from Kahn import kahn_topological_sort
+
+try:
+    from .Kahn import kahn_topological_sort
+except ImportError:
+    from Kahn import kahn_topological_sort
 
 def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
     """Run Kahn's algorithm but record all intermediate states.

@@ -2,7 +2,10 @@ import math
 import networkx as nx
 from typing import Dict, Iterable, Hashable, List, Optional, Tuple
 
-from Kahn import kahn_topological_sort  # your Kahn.py
+try:
+    from .Kahn import kahn_topological_sort
+except ImportError:
+    from Kahn import kahn_topological_sort
 
 def forward_arrival_times(
     G: nx.DiGraph,

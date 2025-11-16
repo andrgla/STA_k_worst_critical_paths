@@ -3,16 +3,32 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
 import os
-from AnimateKahn import animate_kahn
-from AnimateKahn import kahn_with_states
-
-from Kahn import kahn_topological_sort
-
+import sys
 from typing import Iterable, Hashable, Optional, Dict
 
-from Forwards import forward_arrival_times
-from Backwards import backward_required_times
-from SlackComputation import compute_slacks
+# Handle imports for both module and direct script execution
+# When run as a script, add the sta directory to path first
+# Check if we're being run directly (not imported as a module)
+if __name__ == "__main__" or not __package__:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+
+try:
+    from .AnimateKahn import animate_kahn
+    from .AnimateKahn import kahn_with_states
+    from .Kahn import kahn_topological_sort
+    from .Forwards import forward_arrival_times
+    from .Backwards import backward_required_times
+    from .SlackComputation import compute_slacks
+except ImportError:
+    # When run directly as a script, use absolute imports
+    from AnimateKahn import animate_kahn
+    from AnimateKahn import kahn_with_states
+    from Kahn import kahn_topological_sort
+    from Forwards import forward_arrival_times
+    from Backwards import backward_required_times
+    from SlackComputation import compute_slacks
 
 # Number of critical paths to find when plotting
 k = 18  # adjust as needed
@@ -191,10 +207,22 @@ def find_k_critical_paths(
 
 if __name__ == "__main__":
     # Build DAG from the adder circuit and run both STA and animation
-    from Verilog_Parcer import build_graph_from_verilog
-
+    import sys
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    netlist_path = os.path.join(script_dir, "Test_circuit_sequential.v")
+    project_root = os.path.dirname(script_dir)
+    
+    # Add project root to path for imports when running as script
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    
+    # Try relative import first, fall back to absolute
+    try:
+        from .Verilog_Parcer import build_graph_from_verilog
+    except ImportError:
+        from sta.Verilog_Parcer import build_graph_from_verilog
+
+    # Go up one level from sta/ to STA_k_worst_critical_paths/, then into benches/
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_sequential.v")
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
@@ -206,7 +234,7 @@ if __name__ == "__main__":
     print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
 
     # Define simple timing parameters (adjust to your testbench)
-    Tclk = 1.0
+    Tclk = 2.0
     setup = 0.05
     clock_to_q = 0.08
 

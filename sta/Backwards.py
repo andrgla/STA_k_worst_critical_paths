@@ -2,7 +2,10 @@ import math
 import networkx as nx
 from typing import Dict, Iterable, Hashable, List, Optional
 
-from Kahn import kahn_topological_sort  # your file
+try:
+    from .Kahn import kahn_topological_sort
+except ImportError:
+    from Kahn import kahn_topological_sort
 
 def backward_required_times(
     G: nx.DiGraph,
