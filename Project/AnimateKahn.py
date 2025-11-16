@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
+from Kahn import kahn_topological_sort
 
 def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
     """Run Kahn's algorithm but record all intermediate states.
@@ -75,7 +76,7 @@ def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
     return order, states
 
 
-def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100, 
+def animate_kahn(G: nx.DiGraph, interval: int = 50, max_nodes: int = 100, 
                  show_labels: bool = True):
     """Create an animation of Kahn's algorithm on graph G.
 
@@ -98,6 +99,10 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
 
     fig, ax = plt.subplots(figsize=(8, 6))
     plt.tight_layout()
+
+    # Handles that will be reused across frames (for faster animation)
+    node_collection = None
+    text_annotation = None
 
     # Pre-compute all colors for all states (faster than computing each frame)
     all_colors = []
@@ -130,25 +135,48 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
                 colors.append("lightgray")
         all_colors.append(colors)
 
-    def get_node_colors(state, frame_idx):
-        # Use pre-computed colors
-        return all_colors[frame_idx]
+    # (get_node_colors helper removed)
 
     def init():
+        nonlocal node_collection, text_annotation
+
         ax.clear()
         ax.set_title("Kahn's Algorithm: Topological Sort")
         ax.axis("off")
 
-        colors = all_colors[0]
-        # Draw edges once (static)
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=8, 
-                              alpha=0.3, edge_color='gray')
-        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, 
-                                      node_size=300 if len(G) < 50 else 100)
-        if show_labels and len(G) < 100:
-            nx.draw_networkx_labels(G, pos, ax=ax, font_size=6, font_color="dimgray")
+        # Draw edges once (static background)
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            ax=ax,
+            arrows=True,
+            arrowsize=8,
+            alpha=0.3,
+            edge_color="gray",
+        )
 
-        txt = ax.text(
+        # Initial node colors and size
+        node_size = 300 if len(G) < 50 else 100
+        node_collection = nx.draw_networkx_nodes(
+            G,
+            pos,
+            ax=ax,
+            node_color=all_colors[0],
+            node_size=node_size,
+        )
+
+        # Labels only for smaller graphs, drawn once
+        if show_labels and len(G) < 100:
+            nx.draw_networkx_labels(
+                G,
+                pos,
+                ax=ax,
+                font_size=6,
+                font_color="dimgray",
+            )
+
+        # Create a text artist that we will update per frame
+        text_annotation = ax.text(
             0.02,
             0.02,
             "",
@@ -157,30 +185,15 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
             verticalalignment="bottom",
         )
 
-        return nodes, txt
+        return node_collection, text_annotation
 
     def update(frame):
         state = states[frame]
-        ax.clear()
-        ax.set_title("Kahn's Algorithm: Topological Sort")
-        ax.axis("off")
 
-        # Draw edges (static, don't change)
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=8, 
-                              alpha=0.3, edge_color='gray')
+        # Update node colors using precomputed colors
+        node_collection.set_color(all_colors[frame])
 
-        # Draw nodes with pre-computed colors
-        colors = all_colors[frame]
-        node_size = 300 if len(G) < 50 else 100
-        node_collection = nx.draw_networkx_nodes(
-            G, pos, ax=ax, node_color=colors, node_size=node_size
-        )
-        
-        # Only draw labels for smaller graphs
-        if show_labels and len(G) < 100:
-            nx.draw_networkx_labels(G, pos, ax=ax, font_size=6, font_color="dimgray")
-
-        # Simplified text (don't show full queue/processed for large graphs)
+        # Simplified text (avoid huge strings for large graphs)
         if len(G) < 50:
             queue_str = ", ".join(str(x) for x in state["queue"][:10]) or "(empty)"
             if len(state["queue"]) > 10:
@@ -189,7 +202,7 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
         else:
             queue_str = f"{len(state['queue'])} nodes"
             processed_str = f"{len(state['processed'])} nodes"
-        
+
         current_str = state["current"] if state["current"] is not None else "None"
 
         text = (
@@ -199,14 +212,7 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
             f"Processed: {processed_str}"
         )
 
-        text_annotation = ax.text(
-            0.02,
-            0.02,
-            text,
-            transform=ax.transAxes,
-            fontsize=9,
-            verticalalignment="bottom",
-        )
+        text_annotation.set_text(text)
 
         return node_collection, text_annotation
 
@@ -216,7 +222,7 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100,
         frames=len(states),
         init_func=init,
         interval=interval,
-        blit=False,
+        blit=True,
         repeat=False,
     )
 

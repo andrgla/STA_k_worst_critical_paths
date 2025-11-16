@@ -15,7 +15,7 @@ from Backwards import backward_required_times
 from SlackComputation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 5  # adjust as needed
+k = 15  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,
@@ -294,4 +294,4 @@ if __name__ == "__main__":
     print("Topological order length (states):", len(order_states))
 
     # Finally, animate Kahn's algorithm
-    animate_kahn(G, interval=50)
+    animate_kahn(G, interval=100)
