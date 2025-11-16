@@ -2,23 +2,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
-import os
 
 from Kahn import kahn_topological_sort
 
 
 def generate_example_graph() -> nx.DiGraph:
-    """Create a small example DAG to visualize Kahn's algorithm.
-
-    Feel free to modify this graph to match examples from your report/slides.
-    """
+    """Create a small example DAG to visualize Kahn's algorithm."""
     G = nx.DiGraph()
-
-    # Simple layered DAG
-    # Layer 0: A
-    # Layer 1: B, C
-    # Layer 2: D, E
-    # Layer 3: F
     edges = [
         ("A", "B"),
         ("A", "C"),
@@ -33,15 +23,7 @@ def generate_example_graph() -> nx.DiGraph:
 
 
 def kahn_with_states(G: nx.DiGraph):
-    """Run Kahn's algorithm but record all intermediate states.
-
-    Each state dictionary contains:
-      - "step": step index
-      - "processed": list of nodes that have been output so far
-      - "queue": nodes currently in the zero-indegree queue
-      - "current": node being processed at this step (or None)
-      - "indeg": current indegree map
-    """
+    """Run Kahn's algorithm but record all intermediate states."""
     if not G.is_directed():
         raise TypeError("Graph must be a directed graph (DiGraph).")
 
@@ -104,51 +86,32 @@ def kahn_with_states(G: nx.DiGraph):
 
 
 def animate_kahn(G: nx.DiGraph, interval: int = 1000):
-    """Create an animation of Kahn's algorithm on graph G.
-
-    `interval` is the time between frames in milliseconds.
-    """
+    """Create an animation of Kahn's algorithm on graph G."""
     order, states = kahn_with_states(G)
 
-    cmap = plt.cm.get_cmap(
-        'plasma'
-    )  # plasma roughly goes from dark purple to yellow
-    num_frames = len(states) if len(states) > 1 else 1
-
-    # Fixed layout so nodes don't move between frames
     pos = nx.spring_layout(G, seed=42)
 
     fig, ax = plt.subplots(figsize=(6, 4))
     plt.tight_layout()
 
-    # We will update these artists in the animation
     node_collection = None
-    edge_collection = None
     text_annotation = None
 
-    def get_node_colors(state, frame_idx):
+    def get_node_colors(state):
         processed = set(state["processed"])
         queue = set(state["queue"])
         current = state["current"]
 
-        # Normalize frame index to [0, 1] and pick a color from purple to yellow
-        t = frame_idx / (num_frames - 1) if num_frames > 1 else 0.0
-        step_color = cmap(t)
-
         colors = []
         for n in G.nodes():
             if n == current:
-                # Highlight current node with full step color
-                colors.append(step_color)
+                colors.append("tab:orange")      # node being processed
             elif n in processed:
-                # Slightly desaturated version of step color for processed
-                colors.append((step_color[0], step_color[1], step_color[2], 0.8))
+                colors.append("tab:green")       # already output
             elif n in queue:
-                # Lighter version of step color for queue nodes
-                colors.append((step_color[0], step_color[1], step_color[2], 0.5))
+                colors.append("tab:blue")        # in zero-indegree queue
             else:
-                # Still-unreached nodes in light gray
-                colors.append("lightgray")
+                colors.append("lightgray")       # not yet reachable
         return colors
 
     def init():
@@ -156,10 +119,10 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000):
         ax.set_title("Kahn's Algorithm: Topological Sort")
         ax.axis("off")
 
-        colors = get_node_colors(states[0], 0)
+        colors = get_node_colors(states[0])
         nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
-        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, node_size=200)
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=8, font_color="dimgray")
+        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, node_size=500)
+        nx.draw_networkx_labels(G, pos, ax=ax, font_size=10, font_weight="bold")
 
         txt = ax.text(
             0.02,
@@ -180,17 +143,14 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000):
         ax.set_title("Kahn's Algorithm: Topological Sort")
         ax.axis("off")
 
-        # Draw edges
         nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
 
-        # Draw nodes with colors for this state
-        colors = get_node_colors(state, frame)
+        colors = get_node_colors(state)
         node_collection = nx.draw_networkx_nodes(
             G, pos, ax=ax, node_color=colors, node_size=500
         )
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=8, font_color="dimgray")
+        nx.draw_networkx_labels(G, pos, ax=ax, font_size=10, font_weight="bold")
 
-        # Text with step info, queue and processed order
         queue_str = ", ".join(str(x) for x in state["queue"]) or "(empty)"
         processed_str = ", ".join(str(x) for x in state["processed"]) or "(none)"
         current_str = state["current"] if state["current"] is not None else "None"
@@ -229,26 +189,13 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000):
 
 
 if __name__ == "__main__":
-    # Animate Kahn's algorithm on the DAG built from the adder circuit
-    from Verilog_Parcer import build_graph_from_verilog
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    netlist_path = os.path.join(script_dir, "Test_circuit_adder.v")
-
-    # The parser is expected to return:
-    #   - G: nx.DiGraph representing the timing/circuit DAG
-    #   - startpoints: iterable of startpoint nodes (unused here)
-    #   - endpoints: iterable of endpoint nodes (unused here)
-    G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
-
-    print(f"Loaded DAG from {netlist_path}")
-    print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
+    G = generate_example_graph()
 
     # Sanity check: instrumented version matches your original implementation
     order_plain = kahn_topological_sort(G)
     order_states, _ = kahn_with_states(G)
 
-    print("Topological order length (kahn_topological_sort):", len(order_plain))
-    print("Topological order length (states):", len(order_states))
+    print("Topological order (kahn_topological_sort):", order_plain)
+    print("Topological order (states):", order_states)
 
-    animate_kahn(G, interval=50)
+    animate_kahn(G, interval=1000)
