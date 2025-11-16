@@ -76,7 +76,7 @@ def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
     return order, states
 
 
-def animate_kahn(G: nx.DiGraph, interval: int = 50, max_nodes: int = 100, 
+def animate_kahn(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100, 
                  show_labels: bool = True):
     """Create an animation of Kahn's algorithm on graph G.
 
@@ -105,6 +105,23 @@ def animate_kahn(G: nx.DiGraph, interval: int = 50, max_nodes: int = 100,
     text_annotation = None
 
     # Pre-compute all colors for all states (faster than computing each frame)
+    # Track when each node was first processed to "remember" its color
+    node_processed_at = {}  # node -> frame index when it was processed
+    
+    # First pass: determine when each node was processed
+    for frame_idx, state in enumerate(states):
+        current = state["current"]
+        if current is not None and current not in node_processed_at:
+            node_processed_at[current] = frame_idx
+    
+    # Pre-compute the color each node should have based on when it was processed
+    node_colors = {}  # node -> (r, g, b, a) color tuple
+    for node, process_frame in node_processed_at.items():
+        t = process_frame / (num_frames - 1) if num_frames > 1 else 0.0
+        step_color = cmap(t)
+        node_colors[node] = (step_color[0], step_color[1], step_color[2], 0.8)
+    
+    # Pre-compute all colors for all frames
     all_colors = []
     processed_sets = []
     queue_sets = []
@@ -119,17 +136,20 @@ def animate_kahn(G: nx.DiGraph, interval: int = 50, max_nodes: int = 100,
         queue_sets.append(queue)
         current_nodes.append(current)
         
-        # Pre-compute colors for this state
+        # Current step color for the node being processed now
         t = frame_idx / (num_frames - 1) if num_frames > 1 else 0.0
         step_color = cmap(t)
         
         colors = []
         for n in G.nodes():
             if n == current:
+                # Current node being processed gets the current step color
                 colors.append(step_color)
             elif n in processed:
-                colors.append((step_color[0], step_color[1], step_color[2], 0.8))
+                # Processed nodes keep their "remembered" color from when they were processed
+                colors.append(node_colors.get(n, "lightgray"))
             elif n in queue:
+                # Queue nodes get a lighter version of current step color
                 colors.append((step_color[0], step_color[1], step_color[2], 0.5))
             else:
                 colors.append("lightgray")
