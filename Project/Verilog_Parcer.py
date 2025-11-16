@@ -1,7 +1,29 @@
 import re
 import networkx as nx
 
+#added delay between edges to simulate the delay of the gates
+DEFAULT_DELAY = 0.1  # or 1.0, or whatever "1 gate" means
+
 def parse_verilog_to_dag(verilog_text):
+    """
+    Build a combinational DAG from a (possibly sequential) Verilog description.
+
+    - Continuous assignments (`assign lhs = rhs;`) are treated as combinational edges.
+    - Combinational always blocks (`always @(*)` or `always @*`) are treated similarly:
+      assignments inside them create edges from RHS signals to LHS.
+    - Clocked always blocks (`always @(posedge ...)` / `negedge`) are used to detect
+      state registers:
+        * The LHS of non-blocking assignments (<=) in such blocks are treated as
+          registered outputs (Q signals).
+        * The RHS signals of those assignments are treated as D-input nets.
+      We intentionally do NOT add edges from RHS to LHS for these assignments, because
+      they represent a cycle-to-cycle transfer (flops), not combinational logic.
+
+    Returns:
+        G: nx.DiGraph
+        ff_q_nets: set of signals that are clocked registers (Q nets)
+        d_nets: set of signals that drive those registers (D nets)
+    """
     # Graph where nodes are net names (strings), edges are data dependencies
     G = nx.DiGraph()
 
@@ -13,75 +35,198 @@ def parse_verilog_to_dag(verilog_text):
     #  - normal identifiers:   a123, n386, f[0], etc.
     signal_re = re.compile(r'(\\\S+|[A-Za-z_]\w*(?:\[\d+\])?)')
 
+    # Procedural assignments inside always blocks: "lhs = rhs;" or "lhs <= rhs;"
+    proc_assign_re = re.compile(
+        r'\s*([A-Za-z_]\w*(?:\[\d+\])?)\s*(<=|=)\s*(.+?);'
+    )
+
+    # Regex for MUX2 module instantiation: "MUX2 instance_name ( .A(signalA), .B(signalB), .S(signalS), .Y(outputY) );"
+    # This matches patterns like: MUX2 mux_acc0 ( .A(\acc[0] ), .B(\total[0] ), .S(n0), .Y(n10) );
+    # Also handles: MUX2 mux_rst0 ( .A(n10), .B(1'b0), .S(reset_acc), .Y(\acc_next[0] ) );
+    mux2_re = re.compile(
+        r'\s*MUX2\s+\w+\s*\(\s*\.A\s*\(\s*([^)]+)\s*\)\s*,\s*\.B\s*\(\s*([^)]+)\s*\)\s*,\s*\.S\s*\(\s*([^)]+)\s*\)\s*,\s*\.Y\s*\(\s*([^)]+)\s*\)\s*\);'
+    )
+
+    ff_q_nets = set()  # registers updated in clocked always blocks
+    d_nets = set()     # nets that drive those registers (D inputs)
+
+    in_seq_always = False   # always @(posedge/negedge ...)
+    in_comb_always = False  # always @(*) or always @*
+    
+    # Counter for generating unique intermediate signal names for MUX2 expansions
+    mux2_counter = 0
+
     for line in verilog_text.splitlines():
-        m = assign_re.match(line)
-        if not m:
+        stripped = line.strip()
+
+        # Detect entry into always blocks
+        if stripped.startswith("always"):
+            # Very simple heuristic: clocked vs combinational
+            if "posedge" in stripped or "negedge" in stripped:
+                in_seq_always = True
+                in_comb_always = False
+            else:
+                # e.g. "always @(*)" or "always @*"
+                in_comb_always = True
+                in_seq_always = False
             continue
 
-        lhs_raw, rhs_raw = m.groups()
-        lhs_raw = lhs_raw.strip()
+        # Detect end of an always block
+        if in_seq_always or in_comb_always:
+            if stripped.startswith("end"):
+                in_seq_always = False
+                in_comb_always = False
+                continue
 
-        # canonicalize LHS: for escaped identifiers, strip trailing whitespace
-        lhs = lhs_raw
+        # Inside a clocked always block: detect state registers
+        if in_seq_always:
+            m = proc_assign_re.match(line)
+            if m:
+                lhs, op, rhs_raw = m.groups()
+                lhs = lhs.strip()
+                # Treat LHS as a registered signal (Q net)
+                ff_q_nets.add(lhs)
+                G.add_node(lhs)
 
-        # find all signal tokens on RHS
-        rhs_signals = signal_re.findall(rhs_raw)
+                # RHS signals are the D-inputs that feed the reg
+                rhs_signals = signal_re.findall(rhs_raw)
+                for s in rhs_signals:
+                    s = s.strip()
+                    if not s:
+                        continue
+                    d_nets.add(s)
+                    G.add_node(s)
+            # Do NOT add combinational edges from rhs -> lhs here
+            # (they are across clock cycles)
+            continue
 
-        # filter out things that are obviously not nets if needed
-        # (here we assume every match is a net, since we only have &, |, ~, etc.)
-        for s in rhs_signals:
-            # add nodes just in case
-            G.add_node(s)
-            G.add_node(lhs)
-            # edge from source net to destination net
-            G.add_edge(s, lhs)
+        # Inside a combinational always block: build combinational edges
+        if in_comb_always:
+            m = proc_assign_re.match(line)
+            if m:
+                lhs, op, rhs_raw = m.groups()
+                lhs = lhs.strip()
+                rhs_signals = signal_re.findall(rhs_raw)
+                for s in rhs_signals:
+                    s = s.strip()
+                    if not s:
+                        continue
+                    G.add_node(s)
+                    G.add_node(lhs)
+                    G.add_edge(s, lhs, delay=DEFAULT_DELAY)
+            continue
 
-    return G
+        # Handle MUX2 module instantiations: expand to gate-level logic
+        # MUX2 logic: Y = S ? B : A
+        # Gate-level: nS = ~S, t0 = A & nS, t1 = B & S, Y = t0 | t1
+        m = mux2_re.match(line)
+        if m:
+            signal_a, signal_b, signal_s, signal_y = m.groups()
+            signal_a = signal_a.strip()
+            signal_b = signal_b.strip()
+            signal_s = signal_s.strip()
+            signal_y = signal_y.strip()
+            
+            # Generate unique intermediate signal names for this MUX2 instance
+            mux2_counter += 1
+            nS_name = f"mux2_nS_{mux2_counter}"
+            t0_name = f"mux2_t0_{mux2_counter}"
+            t1_name = f"mux2_t1_{mux2_counter}"
+            
+            # Add all nodes
+            G.add_node(signal_a)
+            G.add_node(signal_b)
+            G.add_node(signal_s)
+            G.add_node(nS_name)
+            G.add_node(t0_name)
+            G.add_node(t1_name)
+            G.add_node(signal_y)
+            
+            # NOT gate: S -> nS
+            G.add_edge(signal_s, nS_name, delay=DEFAULT_DELAY)
+            
+            # AND gate: A, nS -> t0
+            G.add_edge(signal_a, t0_name, delay=DEFAULT_DELAY)
+            G.add_edge(nS_name, t0_name, delay=DEFAULT_DELAY)
+            
+            # AND gate: B, S -> t1
+            G.add_edge(signal_b, t1_name, delay=DEFAULT_DELAY)
+            G.add_edge(signal_s, t1_name, delay=DEFAULT_DELAY)
+            
+            # OR gate: t0, t1 -> Y
+            G.add_edge(t0_name, signal_y, delay=DEFAULT_DELAY)
+            G.add_edge(t1_name, signal_y, delay=DEFAULT_DELAY)
+            
+            continue
+
+        # Outside any always-block: handle continuous assignments
+        m = assign_re.match(line)
+        if m:
+            lhs_raw, rhs_raw = m.groups()
+            lhs = lhs_raw.strip()
+
+            rhs_signals = signal_re.findall(rhs_raw)
+            for s in rhs_signals:
+                s = s.strip()
+                if not s:
+                    continue
+                G.add_node(s)
+                G.add_node(lhs)
+                G.add_edge(s, lhs, delay=DEFAULT_DELAY)
+
+    return G, ff_q_nets, d_nets
 
 # Example usage:
 if __name__ == "__main__":
     with open("top.v", "r") as f:
         verilog_text = f.read()
 
-    G = parse_verilog_to_dag(verilog_text)
+    G, ff_q_nets, d_nets = parse_verilog_to_dag(verilog_text)
 
     print("Number of nodes:", G.number_of_nodes())
     print("Number of edges:", G.number_of_edges())
 
     # Primary inputs = nodes with no predecessors
     primary_inputs = [n for n in G.nodes if G.in_degree(n) == 0]
-    # Primary outputs = nodes with no successors (often \f[*] and cOut)
+    # Primary outputs = nodes with no successors
     primary_outputs = [n for n in G.nodes if G.out_degree(n) == 0]
 
     print("Primary inputs (first 10):", primary_inputs[:10])
     print("Primary outputs:", primary_outputs)
+    print("Detected FF Q nets (state registers):", sorted(ff_q_nets))
+    print("Detected FF D nets:", sorted(d_nets))
 
 
 def build_graph_from_verilog(netlist_path: str):
     """
     Parse a Verilog netlist file and return a graph with startpoints and endpoints.
-    
+
     Args:
         netlist_path: Path to the Verilog file
-        
+
     Returns:
-        G: nx.DiGraph with delay attributes on edges (defaults to 0.0 if not specified)
-        startpoints: List of nodes with no predecessors (primary inputs)
-        endpoints: List of nodes with no successors (primary outputs)
+        G: nx.DiGraph with delay attributes on edges
+        startpoints: List of nodes treated as timing startpoints
+        endpoints: List of nodes treated as timing endpoints
     """
     with open(netlist_path, "r") as f:
         verilog_text = f.read()
-    
-    G = parse_verilog_to_dag(verilog_text)
-    
-    # Add default delay of 0.0 to all edges if not present
+
+    G, ff_q_nets, d_nets = parse_verilog_to_dag(verilog_text)
+
+    # Ensure every edge has a delay attribute
     for u, v in G.edges():
         if "delay" not in G[u][v]:
-            G[u][v]["delay"] = 0.0
-    
-    # Primary inputs = nodes with no predecessors (startpoints)
-    startpoints = [n for n in G.nodes() if G.in_degree(n) == 0]
-    # Primary outputs = nodes with no successors (endpoints)
-    endpoints = [n for n in G.nodes() if G.out_degree(n) == 0]
-    
+            G[u][v]["delay"] = DEFAULT_DELAY
+
+    # Combinational start/end based on graph structure
+    comb_start = {n for n in G.nodes() if G.in_degree(n) == 0}
+    comb_end = {n for n in G.nodes() if G.out_degree(n) == 0}
+
+    # Final startpoints/endpoints:
+    #  - Startpoints: primary-like sources + FF Q nets (state registers)
+    #  - Endpoints: primary-like sinks + FF D nets (inputs to registers)
+    startpoints = sorted(comb_start.union(ff_q_nets))
+    endpoints = sorted(comb_end.union(d_nets))
+
     return G, startpoints, endpoints

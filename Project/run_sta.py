@@ -15,7 +15,7 @@ from Backwards import backward_required_times
 from SlackComputation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 15  # adjust as needed
+k = 3  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     from Verilog_Parcer import build_graph_from_verilog
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    netlist_path = os.path.join(script_dir, "Test_circuit_adder.v")
+    netlist_path = os.path.join(script_dir, "Test_circuit_sequential.v")
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
@@ -249,7 +249,7 @@ if __name__ == "__main__":
 
     # Optional: visualize the timing graph with critical paths highlighted
     if critical_paths:
-        pos = nx.spring_layout(G, seed=42)
+        pos = nx.spring_layout(G, seed=12)
 
         nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
         nx.draw_networkx_edges(
