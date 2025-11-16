@@ -3,27 +3,19 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
 
-from Kahn import kahn_topological_sort
+def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
+    """Run Kahn's algorithm but record all intermediate states.
 
-
-def generate_example_graph() -> nx.DiGraph:
-    """Create a small example DAG to visualize Kahn's algorithm."""
-    G = nx.DiGraph()
-    edges = [
-        ("A", "B"),
-        ("A", "C"),
-        ("B", "D"),
-        ("B", "E"),
-        ("C", "D"),
-        ("D", "F"),
-        ("E", "F"),
-    ]
-    G.add_edges_from(edges)
-    return G
-
-
-def kahn_with_states(G: nx.DiGraph):
-    """Run Kahn's algorithm but record all intermediate states."""
+    Each state dictionary contains:
+      - "step": step index
+      - "processed": list of nodes that have been output so far
+      - "queue": nodes currently in the zero-indegree queue
+      - "current": node being processed at this step (or None)
+    
+    Args:
+        skip_intermediate: If True, only record states when a node is processed
+                          (skips the "after updating" states to reduce frames)
+    """
     if not G.is_directed():
         raise TypeError("Graph must be a directed graph (DiGraph).")
 
@@ -40,7 +32,6 @@ def kahn_with_states(G: nx.DiGraph):
             "processed": list(order),
             "queue": list(q),
             "current": None,
-            "indeg": dict(indeg),
         }
     )
 
@@ -50,14 +41,13 @@ def kahn_with_states(G: nx.DiGraph):
         order.append(u)
         step += 1
 
-        # After choosing `u` but before relaxing its outgoing edges
+        # State when processing node u
         states.append(
             {
                 "step": step,
                 "processed": list(order),
                 "queue": list(q),
                 "current": u,
-                "indeg": dict(indeg),
             }
         )
 
@@ -66,16 +56,16 @@ def kahn_with_states(G: nx.DiGraph):
             if indeg[v] == 0:
                 q.append(v)
 
-        # After updating indegrees and queue
-        states.append(
-            {
-                "step": step,
-                "processed": list(order),
-                "queue": list(q),
-                "current": None,
-                "indeg": dict(indeg),
-            }
-        )
+        # Only record intermediate state if requested (for smoother animation)
+        if not skip_intermediate:
+            states.append(
+                {
+                    "step": step,
+                    "processed": list(order),
+                    "queue": list(q),
+                    "current": None,
+                }
+            )
 
     if len(order) != len(G):
         raise nx.NetworkXUnfeasible(
@@ -85,44 +75,78 @@ def kahn_with_states(G: nx.DiGraph):
     return order, states
 
 
-def animate_kahn(G: nx.DiGraph, interval: int = 1000):
-    """Create an animation of Kahn's algorithm on graph G."""
-    order, states = kahn_with_states(G)
+def animate_kahn(G: nx.DiGraph, interval: int = 1000, max_nodes: int = 100, 
+                 show_labels: bool = True):
+    """Create an animation of Kahn's algorithm on graph G.
 
-    pos = nx.spring_layout(G, seed=42)
+    Args:
+        interval: Time between frames in milliseconds
+        max_nodes: If graph has more nodes, subsample or use simpler visualization
+        show_labels: Whether to show node labels (slower if True)
+    """
+    # For very large graphs, warn user
+    if len(G) > max_nodes:
+        print(f"Warning: Graph has {len(G)} nodes. Consider using a smaller subgraph for animation.")
+    
+    order, states = kahn_with_states(G, skip_intermediate=True)
 
-    fig, ax = plt.subplots(figsize=(6, 4))
+    cmap = plt.cm.get_cmap('plasma')
+    num_frames = len(states) if len(states) > 1 else 1
+
+    # Use spring layout but with reduced iterations for speed
+    pos = nx.spring_layout(G, seed=42, iterations=20)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
     plt.tight_layout()
 
-    node_collection = None
-    text_annotation = None
-
-    def get_node_colors(state):
+    # Pre-compute all colors for all states (faster than computing each frame)
+    all_colors = []
+    processed_sets = []
+    queue_sets = []
+    current_nodes = []
+    
+    for frame_idx, state in enumerate(states):
         processed = set(state["processed"])
         queue = set(state["queue"])
         current = state["current"]
-
+        
+        processed_sets.append(processed)
+        queue_sets.append(queue)
+        current_nodes.append(current)
+        
+        # Pre-compute colors for this state
+        t = frame_idx / (num_frames - 1) if num_frames > 1 else 0.0
+        step_color = cmap(t)
+        
         colors = []
         for n in G.nodes():
             if n == current:
-                colors.append("tab:orange")      # node being processed
+                colors.append(step_color)
             elif n in processed:
-                colors.append("tab:green")       # already output
+                colors.append((step_color[0], step_color[1], step_color[2], 0.8))
             elif n in queue:
-                colors.append("tab:blue")        # in zero-indegree queue
+                colors.append((step_color[0], step_color[1], step_color[2], 0.5))
             else:
-                colors.append("lightgray")       # not yet reachable
-        return colors
+                colors.append("lightgray")
+        all_colors.append(colors)
+
+    def get_node_colors(state, frame_idx):
+        # Use pre-computed colors
+        return all_colors[frame_idx]
 
     def init():
         ax.clear()
         ax.set_title("Kahn's Algorithm: Topological Sort")
         ax.axis("off")
 
-        colors = get_node_colors(states[0])
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
-        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, node_size=500)
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=10, font_weight="bold")
+        colors = all_colors[0]
+        # Draw edges once (static)
+        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=8, 
+                              alpha=0.3, edge_color='gray')
+        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, 
+                                      node_size=300 if len(G) < 50 else 100)
+        if show_labels and len(G) < 100:
+            nx.draw_networkx_labels(G, pos, ax=ax, font_size=6, font_color="dimgray")
 
         txt = ax.text(
             0.02,
@@ -136,30 +160,43 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000):
         return nodes, txt
 
     def update(frame):
-        nonlocal node_collection, text_annotation
-
         state = states[frame]
         ax.clear()
         ax.set_title("Kahn's Algorithm: Topological Sort")
         ax.axis("off")
 
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
+        # Draw edges (static, don't change)
+        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=8, 
+                              alpha=0.3, edge_color='gray')
 
-        colors = get_node_colors(state)
+        # Draw nodes with pre-computed colors
+        colors = all_colors[frame]
+        node_size = 300 if len(G) < 50 else 100
         node_collection = nx.draw_networkx_nodes(
-            G, pos, ax=ax, node_color=colors, node_size=500
+            G, pos, ax=ax, node_color=colors, node_size=node_size
         )
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=10, font_weight="bold")
+        
+        # Only draw labels for smaller graphs
+        if show_labels and len(G) < 100:
+            nx.draw_networkx_labels(G, pos, ax=ax, font_size=6, font_color="dimgray")
 
-        queue_str = ", ".join(str(x) for x in state["queue"]) or "(empty)"
-        processed_str = ", ".join(str(x) for x in state["processed"]) or "(none)"
+        # Simplified text (don't show full queue/processed for large graphs)
+        if len(G) < 50:
+            queue_str = ", ".join(str(x) for x in state["queue"][:10]) or "(empty)"
+            if len(state["queue"]) > 10:
+                queue_str += f", ... ({len(state['queue'])} total)"
+            processed_str = f"{len(state['processed'])} nodes"
+        else:
+            queue_str = f"{len(state['queue'])} nodes"
+            processed_str = f"{len(state['processed'])} nodes"
+        
         current_str = state["current"] if state["current"] is not None else "None"
 
         text = (
-            f"Step: {state['step']}\n"
+            f"Step: {state['step']}/{len(order)}\n"
             f"Current: {current_str}\n"
-            f"Queue: [{queue_str}]\n"
-            f"Processed: [{processed_str}]"
+            f"Queue: {queue_str}\n"
+            f"Processed: {processed_str}"
         )
 
         text_annotation = ax.text(
@@ -186,16 +223,3 @@ def animate_kahn(G: nx.DiGraph, interval: int = 1000):
     plt.show()
 
     return anim
-
-
-if __name__ == "__main__":
-    G = generate_example_graph()
-
-    # Sanity check: instrumented version matches your original implementation
-    order_plain = kahn_topological_sort(G)
-    order_states, _ = kahn_with_states(G)
-
-    print("Topological order (kahn_topological_sort):", order_plain)
-    print("Topological order (states):", order_states)
-
-    animate_kahn(G, interval=1000)

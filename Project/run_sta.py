@@ -3,233 +3,194 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
 import os
+from AnimateKahn import animate_kahn
+from AnimateKahn import kahn_with_states
 
 from Kahn import kahn_topological_sort
 
+from typing import Iterable, Hashable, Optional, Dict
 
-def generate_example_graph() -> nx.DiGraph:
-    """Create a small example DAG to visualize Kahn's algorithm.
+from Forwards import forward_arrival_times
+from Backwards import backward_required_times
+from SlackComputation import compute_slacks
 
-    Feel free to modify this graph to match examples from your report/slides.
-    """
-    G = nx.DiGraph()
+# Number of critical paths to find when plotting
+k = 5  # adjust as needed
 
-    # Simple layered DAG
-    # Layer 0: A
-    # Layer 1: B, C
-    # Layer 2: D, E
-    # Layer 3: F
-    edges = [
-        ("A", "B"),
-        ("A", "C"),
-        ("B", "D"),
-        ("B", "E"),
-        ("C", "D"),
-        ("D", "F"),
-        ("E", "F"),
-    ]
-    G.add_edges_from(edges)
-    return G
+def run_sta(
+    G: nx.DiGraph,
+    startpoints: Iterable[Hashable],
+    endpoints: Iterable[Hashable],
+    Tclk: float,
+    *,
+    setup: float = 0.0,
+    clock_to_q: float = 0.0,
+    startpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    endpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    delay_attr: str = "delay",
+    eps: float = 1e-12,
+):
+    topo = kahn_topological_sort(G)
+    AT, backpred = forward_arrival_times(
+        G,
+        topo,
+        startpoints,
+        clock_to_q=clock_to_q,
+        startpoint_overrides=startpoint_overrides,
+        delay_attr=delay_attr,
+        eps=eps,
+    )
+    RT = backward_required_times(
+        G,
+        topo,
+        endpoints,
+        Tclk=Tclk,
+        setup=setup,
+        endpoint_overrides=endpoint_overrides,
+        delay_attr=delay_attr,
+    )
+    node_slack, edge_slack, WNS, TNS = compute_slacks(G, AT, RT, delay_attr)
+    return {
+        "AT": AT,
+        "RT": RT,
+        "backpred": backpred,
+        "node_slack": node_slack,
+        "edge_slack": edge_slack,
+        "WNS": WNS,
+        "TNS": TNS,
+        "topo": topo,
+    }
 
 
-def kahn_with_states(G: nx.DiGraph):
-    """Run Kahn's algorithm but record all intermediate states.
-
-    Each state dictionary contains:
-      - "step": step index
-      - "processed": list of nodes that have been output so far
-      - "queue": nodes currently in the zero-indegree queue
-      - "current": node being processed at this step (or None)
-      - "indeg": current indegree map
-    """
-    if not G.is_directed():
-        raise TypeError("Graph must be a directed graph (DiGraph).")
-
-    indeg = {u: G.in_degree(u) for u in G.nodes()}
-    q = deque([u for u, d in indeg.items() if d == 0])
-
-    order = []
-    states = []
-
-    # Initial state (before any node is removed)
-    states.append(
-        {
-            "step": 0,
-            "processed": list(order),
-            "queue": list(q),
-            "current": None,
-            "indeg": dict(indeg),
-        }
+def extract_single_critical_path(
+    G: nx.DiGraph,
+    startpoints: Iterable[Hashable],
+    endpoints: Iterable[Hashable],
+    Tclk: float,
+    *,
+    setup: float = 0.0,
+    clock_to_q: float = 0.0,
+    startpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    endpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    delay_attr: str = "delay",
+    eps: float = 1e-12,
+):
+    """Run STA once and extract a single most critical path."""
+    res = run_sta(
+        G,
+        startpoints=startpoints,
+        endpoints=endpoints,
+        Tclk=Tclk,
+        setup=setup,
+        clock_to_q=clock_to_q,
+        startpoint_overrides=startpoint_overrides,
+        endpoint_overrides=endpoint_overrides,
+        delay_attr=delay_attr,
+        eps=eps,
     )
 
-    step = 0
-    while q:
-        u = q.popleft()
-        order.append(u)
-        step += 1
+    node_slack = res["node_slack"]
+    edge_slack = res["edge_slack"]
+    backpred = res["backpred"]
 
-        # After choosing `u` but before relaxing its outgoing edges
-        states.append(
-            {
-                "step": step,
-                "processed": list(order),
-                "queue": list(q),
-                "current": u,
-                "indeg": dict(indeg),
-            }
+    valid_endpoints = [e for e in endpoints if e in node_slack]
+    if not valid_endpoints:
+        return None
+
+    worst_endpoint = min(valid_endpoints, key=lambda e: node_slack[e])
+
+    path_nodes = []
+    path_edges = []
+    current = worst_endpoint
+
+    while True:
+        path_nodes.append(current)
+        if current in startpoints or current not in backpred or not backpred[current]:
+            break
+        pred = backpred[current][0]  # follow the most critical predecessor
+        path_edges.append((pred, current))
+        current = pred
+
+    if len(path_nodes) < 2:
+        return None
+
+    # Reverse so that nodes/edges go from startpoint -> endpoint
+    path_nodes = list(reversed(path_nodes))
+    path_edges = list(reversed(path_edges))
+
+    # Compute total delay along the path
+    total_delay = 0.0
+    for (u, v) in path_edges:
+        if G.has_edge(u, v):
+            total_delay += float(G[u][v].get(delay_attr, 0.0))
+
+    # Compute WNS/TNS restricted to this path
+    node_slacks = [node_slack.get(n, float("inf")) for n in path_nodes]
+    edge_slacks = [edge_slack.get(e, float("inf")) for e in path_edges]
+    all_slacks = node_slacks + edge_slacks
+
+    if all_slacks:
+        path_WNS = min(all_slacks)
+        path_TNS = sum(s for s in all_slacks if s < 0.0)
+    else:
+        path_WNS = float("inf")
+        path_TNS = 0.0
+
+    return {
+        "nodes": path_nodes,
+        "edges": path_edges,
+        "delay": total_delay,
+        "WNS": path_WNS,
+        "TNS": path_TNS,
+        "sta": res,
+    }
+
+
+def find_k_critical_paths(
+    G: nx.DiGraph,
+    startpoints: Iterable[Hashable],
+    endpoints: Iterable[Hashable],
+    Tclk: float,
+    *,
+    setup: float = 0.0,
+    clock_to_q: float = 0.0,
+    startpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    endpoint_overrides: Optional[Dict[Hashable, float]] = None,
+    delay_attr: str = "delay",
+    eps: float = 1e-12,
+    k: int = 1,
+):
+    """Extract up to k edge-disjoint critical paths."""
+    work_graph = G.copy()
+    critical_paths = []
+
+    for _ in range(k):
+        path_info = extract_single_critical_path(
+            work_graph,
+            startpoints=startpoints,
+            endpoints=endpoints,
+            Tclk=Tclk,
+            setup=setup,
+            clock_to_q=clock_to_q,
+            startpoint_overrides=startpoint_overrides,
+            endpoint_overrides=endpoint_overrides,
+            delay_attr=delay_attr,
+            eps=eps,
         )
+        if not path_info:
+            break
 
-        for v in G.successors(u):
-            indeg[v] -= 1
-            if indeg[v] == 0:
-                q.append(v)
+        critical_paths.append(path_info)
 
-        # After updating indegrees and queue
-        states.append(
-            {
-                "step": step,
-                "processed": list(order),
-                "queue": list(q),
-                "current": None,
-                "indeg": dict(indeg),
-            }
-        )
+        # Block this path for the next iteration by removing its edges
+        for (u, v) in path_info["edges"]:
+            if work_graph.has_edge(u, v):
+                work_graph.remove_edge(u, v)
 
-    if len(order) != len(G):
-        raise nx.NetworkXUnfeasible(
-            "Graph contains a cycle; topological sort not possible."
-        )
-
-    return order, states
-
-
-def animate_kahn(G: nx.DiGraph, interval: int = 1000):
-    """Create an animation of Kahn's algorithm on graph G.
-
-    `interval` is the time between frames in milliseconds.
-    """
-    order, states = kahn_with_states(G)
-
-    cmap = plt.cm.get_cmap(
-        'plasma'
-    )  # plasma roughly goes from dark purple to yellow
-    num_frames = len(states) if len(states) > 1 else 1
-
-    # Fixed layout so nodes don't move between frames
-    pos = nx.spring_layout(G, seed=42)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    plt.tight_layout()
-
-    # We will update these artists in the animation
-    node_collection = None
-    edge_collection = None
-    text_annotation = None
-
-    def get_node_colors(state, frame_idx):
-        processed = set(state["processed"])
-        queue = set(state["queue"])
-        current = state["current"]
-
-        # Normalize frame index to [0, 1] and pick a color from purple to yellow
-        t = frame_idx / (num_frames - 1) if num_frames > 1 else 0.0
-        step_color = cmap(t)
-
-        colors = []
-        for n in G.nodes():
-            if n == current:
-                # Highlight current node with full step color
-                colors.append(step_color)
-            elif n in processed:
-                # Slightly desaturated version of step color for processed
-                colors.append((step_color[0], step_color[1], step_color[2], 0.8))
-            elif n in queue:
-                # Lighter version of step color for queue nodes
-                colors.append((step_color[0], step_color[1], step_color[2], 0.5))
-            else:
-                # Still-unreached nodes in light gray
-                colors.append("lightgray")
-        return colors
-
-    def init():
-        ax.clear()
-        ax.set_title("Kahn's Algorithm: Topological Sort")
-        ax.axis("off")
-
-        colors = get_node_colors(states[0], 0)
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
-        nodes = nx.draw_networkx_nodes(G, pos, ax=ax, node_color=colors, node_size=200)
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=8, font_color="dimgray")
-
-        txt = ax.text(
-            0.02,
-            0.02,
-            "",
-            transform=ax.transAxes,
-            fontsize=9,
-            verticalalignment="bottom",
-        )
-
-        return nodes, txt
-
-    def update(frame):
-        nonlocal node_collection, text_annotation
-
-        state = states[frame]
-        ax.clear()
-        ax.set_title("Kahn's Algorithm: Topological Sort")
-        ax.axis("off")
-
-        # Draw edges
-        nx.draw_networkx_edges(G, pos, ax=ax, arrows=True, arrowsize=10)
-
-        # Draw nodes with colors for this state
-        colors = get_node_colors(state, frame)
-        node_collection = nx.draw_networkx_nodes(
-            G, pos, ax=ax, node_color=colors, node_size=500
-        )
-        nx.draw_networkx_labels(G, pos, ax=ax, font_size=8, font_color="dimgray")
-
-        # Text with step info, queue and processed order
-        queue_str = ", ".join(str(x) for x in state["queue"]) or "(empty)"
-        processed_str = ", ".join(str(x) for x in state["processed"]) or "(none)"
-        current_str = state["current"] if state["current"] is not None else "None"
-
-        text = (
-            f"Step: {state['step']}\n"
-            f"Current: {current_str}\n"
-            f"Queue: [{queue_str}]\n"
-            f"Processed: [{processed_str}]"
-        )
-
-        text_annotation = ax.text(
-            0.02,
-            0.02,
-            text,
-            transform=ax.transAxes,
-            fontsize=9,
-            verticalalignment="bottom",
-        )
-
-        return node_collection, text_annotation
-
-    anim = FuncAnimation(
-        fig,
-        update,
-        frames=len(states),
-        init_func=init,
-        interval=interval,
-        blit=False,
-        repeat=False,
-    )
-
-    plt.show()
-
-    return anim
-
+    return critical_paths
 
 if __name__ == "__main__":
-    # Animate Kahn's algorithm on the DAG built from the adder circuit
+    # Build DAG from the adder circuit and run both STA and animation
     from Verilog_Parcer import build_graph_from_verilog
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -237,13 +198,94 @@ if __name__ == "__main__":
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
-    #   - startpoints: iterable of startpoint nodes (unused here)
-    #   - endpoints: iterable of endpoint nodes (unused here)
+    #   - startpoints: iterable of startpoint nodes
+    #   - endpoints: iterable of endpoint nodes
     G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
 
     print(f"Loaded DAG from {netlist_path}")
     print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
 
+    # Define simple timing parameters (adjust to your testbench)
+    Tclk = 1.0
+    setup = 0.05
+    clock_to_q = 0.08
+
+    # ---- Part 1: STA and k worst critical paths ----
+    sta_res = run_sta(
+        G,
+        startpoints=startpoints,
+        endpoints=endpoints,
+        Tclk=Tclk,
+        setup=setup,
+        clock_to_q=clock_to_q,
+    )
+    print("=== STA results ===")
+    print("WNS =", sta_res["WNS"], "TNS =", sta_res["TNS"])
+
+    critical_paths = find_k_critical_paths(
+        G,
+        startpoints=startpoints,
+        endpoints=endpoints,
+        Tclk=Tclk,
+        setup=setup,
+        clock_to_q=clock_to_q,
+        delay_attr="delay",
+        k=k,
+    )
+
+    print(f"\nFound {len(critical_paths)} critical path(s)")
+    for i, path_info in enumerate(critical_paths, 1):
+        path_nodes = path_info["nodes"]
+        path_edges = path_info["edges"]
+        path_delay = path_info["delay"]
+        path_WNS = path_info["WNS"]
+        path_TNS = path_info["TNS"]
+
+        print(f"\nPath {i}:")
+        print(f"  Total delay = {path_delay:.6f} ns")
+        print(f"  Path WNS    = {path_WNS:.6f} ns")
+        print(f"  Path TNS    = {path_TNS:.6f} ns")
+        print(f"  Nodes: {len(path_nodes)}, Edges: {len(path_edges)}")
+
+    # Optional: visualize the timing graph with critical paths highlighted
+    if critical_paths:
+        pos = nx.spring_layout(G, seed=42)
+
+        nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
+        nx.draw_networkx_edges(
+            G, pos, arrows=True, arrowsize=5, edge_color="lightgray", alpha=0.3
+        )
+
+        num_paths = len(critical_paths)
+        for i in range(num_paths - 1, -1, -1):
+            path_info = critical_paths[i]
+            path_nodes = path_info["nodes"]
+            path_edges = path_info["edges"]
+
+            if num_paths == 1:
+                red_intensity = 1.0
+            else:
+                red_intensity = 1.0 - (i / (num_paths - 1)) * 0.6
+            color = (red_intensity, 0.0, 0.0)
+
+            nx.draw_networkx_nodes(
+                G, pos, nodelist=path_nodes, node_size=100, node_color=color
+            )
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=path_edges,
+                arrows=True,
+                arrowsize=5,
+                edge_color=color,
+                width=2,
+            )
+
+        nx.draw_networkx_labels(G, pos, font_size=5)
+        plt.title(f"Timing DAG with {len(critical_paths)} Critical Path(s)")
+        plt.show()
+
+    # ---- Part 2: Kahn animation on the same DAG ----
     # Sanity check: instrumented version matches your original implementation
     order_plain = kahn_topological_sort(G)
     order_states, _ = kahn_with_states(G)
@@ -251,4 +293,5 @@ if __name__ == "__main__":
     print("Topological order length (kahn_topological_sort):", len(order_plain))
     print("Topological order length (states):", len(order_states))
 
+    # Finally, animate Kahn's algorithm
     animate_kahn(G, interval=50)
