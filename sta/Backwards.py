@@ -3,9 +3,9 @@ import networkx as nx
 from typing import Dict, Iterable, Hashable, List, Optional
 
 try:
-    from .Kahn import kahn_topological_sort
+    from .Khan import Khan_topological_sort
 except ImportError:
-    from Kahn import kahn_topological_sort
+    from Khan import Khan_topological_sort
 
 def backward_required_times(
     G: nx.DiGraph,
@@ -68,9 +68,9 @@ def backward_required_times_autotopo(
     delay_attr: str = "delay",
 ) -> Dict[Hashable, float]:
     """
-    Convenience wrapper that computes Kahn topo order internally.
+    Convenience wrapper that computes Khan topo order internally.
     """
-    topo = kahn_topological_sort(G)
+    topo = Khan_topological_sort(G)
     return backward_required_times(
         G, topo, endpoints, Tclk, setup, endpoint_overrides, delay_attr
     )

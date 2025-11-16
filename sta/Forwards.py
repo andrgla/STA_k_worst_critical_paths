@@ -3,9 +3,9 @@ import networkx as nx
 from typing import Dict, Iterable, Hashable, List, Optional, Tuple
 
 try:
-    from .Kahn import kahn_topological_sort
+    from .Khan import Khan_topological_sort
 except ImportError:
-    from Kahn import kahn_topological_sort
+    from Khan import Khan_topological_sort
 
 def forward_arrival_times(
     G: nx.DiGraph,
@@ -77,9 +77,9 @@ def forward_arrival_times_autotopo(
     eps: float = 1e-12,
 ) -> Tuple[Dict[Hashable, float], Dict[Hashable, List[Hashable]]]:
     """
-    Convenience wrapper that computes Kahn topo order internally.
+    Convenience wrapper that computes Khan topo order internally.
     """
-    topo = kahn_topological_sort(G)
+    topo = Khan_topological_sort(G)
     return forward_arrival_times(
         G,
         topo,

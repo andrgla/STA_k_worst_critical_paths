@@ -1,7 +1,7 @@
 import networkx as nx
 from collections import deque
 
-def kahn_topological_sort(G: nx.DiGraph):
+def Khan_topological_sort(G: nx.DiGraph):
     # Check if DAG
     if not G.is_directed():
         raise TypeError("Graph must be a directed graph (DiGraph).")

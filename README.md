@@ -9,11 +9,11 @@ STA_k_worst_critical_paths/
 ├── sta/                    # Python package
 │   ├── __init__.py
 │   ├── run_sta.py          # Main STA functions
-│   ├── AnimateKahn.py       # Kahn's algorithm animation
-│   ├── Backwards.py         # Backward required time computation
-│   ├── Forwards.py          # Forward arrival time computation
-│   ├── Kahn.py              # Topological sort implementation
-│   ├── SlackComputation.py  # Slack calculation
+│   ├── animate_khan.py       # Khan's algorithm animation
+│   ├── backwards.py         # Backward required time computation
+│   ├── forwards.py          # Forward arrival time computation
+│   ├── Khan.py              # Topological sort implementation
+│   ├── slack_computation.py  # Slack calculation
 │   └── Verilog_Parcer.py    # Verilog parser
 ├── benches/                 # Verilog benchmarks
 │   ├── Test_circuit_adder.v
@@ -80,7 +80,7 @@ python -m sta.run_sta
 - Backward required time (RT) computation
 - Slack calculation (WNS, TNS)
 - K worst critical path extraction
-- Kahn's algorithm visualization
+- Khan's algorithm visualization
 
 ## Gate Delays
 

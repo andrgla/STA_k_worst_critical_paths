@@ -2,14 +2,10 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
+from Khan import Khan_topological_sort
 
-try:
-    from .Kahn import kahn_topological_sort
-except ImportError:
-    from Kahn import kahn_topological_sort
-
-def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
-    """Run Kahn's algorithm but record all intermediate states.
+def Khan_with_states(G: nx.DiGraph, skip_intermediate=True):
+    """Run Khan's algorithm but record all intermediate states.
 
     Each state dictionary contains:
       - "step": step index
@@ -80,9 +76,9 @@ def kahn_with_states(G: nx.DiGraph, skip_intermediate=True):
     return order, states
 
 
-def animate_kahn(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100, 
+def animate_khan(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100, 
                  show_labels: bool = True):
-    """Create an animation of Kahn's algorithm on graph G.
+    """Create an animation of Khan's algorithm on graph G.
 
     Args:
         interval: Time between frames in milliseconds
@@ -93,7 +89,7 @@ def animate_kahn(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100,
     if len(G) > max_nodes:
         print(f"Warning: Graph has {len(G)} nodes. Consider using a smaller subgraph for animation.")
     
-    order, states = kahn_with_states(G, skip_intermediate=True)
+    order, states = Khan_with_states(G, skip_intermediate=True)
 
     cmap = plt.cm.get_cmap('plasma')
     num_frames = len(states) if len(states) > 1 else 1
@@ -165,7 +161,7 @@ def animate_kahn(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100,
         nonlocal node_collection, text_annotation
 
         ax.clear()
-        ax.set_title("Kahn's Algorithm: Topological Sort")
+        ax.set_title("Khan's Algorithm: Topological Sort")
         ax.axis("off")
 
         # Draw edges once (static background)

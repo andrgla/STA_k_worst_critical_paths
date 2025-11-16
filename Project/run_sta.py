@@ -3,32 +3,16 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
 import os
-import sys
+from animate_khan import animate_khan
+from animate_khan import Khan_with_states
+
+from Khan import Khan_topological_sort
+
 from typing import Iterable, Hashable, Optional, Dict
 
-# Handle imports for both module and direct script execution
-# When run as a script, add the sta directory to path first
-# Check if we're being run directly (not imported as a module)
-if __name__ == "__main__" or not __package__:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-
-try:
-    from .animate_khan import animate_khan
-    from .animate_khan import Khan_with_states
-    from .Khan import Khan_topological_sort
-    from .forwards import forward_arrival_times
-    from .backwards import backward_required_times
-    from .slack_computation import compute_slacks
-except ImportError:
-    # When run directly as a script, use absolute imports
-    from animate_khan import animate_khan
-    from animate_khan import Khan_with_states
-    from Khan import Khan_topological_sort
-    from forwards import forward_arrival_times
-    from backwards import backward_required_times
-    from slack_computation import compute_slacks
+from forwards import forward_arrival_times
+from backwards import backward_required_times
+from slack_computation import compute_slacks
 
 # Number of critical paths to find when plotting
 k = 18  # adjust as needed
@@ -207,26 +191,10 @@ def find_k_critical_paths(
 
 if __name__ == "__main__":
     # Build DAG from the adder circuit and run both STA and animation
-    import sys
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    
-    # Add project root to path for imports when running as script
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-    
-    # Try relative import first, fall back to absolute
-    try:
-        from .verilog_parcer import build_graph_from_verilog
-    except ImportError:
-        # When run directly as a script, sta/ is already in sys.path
-        try:
-            from verilog_parcer import build_graph_from_verilog
-        except ImportError:
-            from sta.verilog_parcer import build_graph_from_verilog
+    from Verilog_Parcer import build_graph_from_verilog
 
-    # Go up one level from sta/ to STA_k_worst_critical_paths/, then into benches/
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_sequential.v")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    netlist_path = os.path.join(script_dir, "Test_circuit_sequential.v")
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
