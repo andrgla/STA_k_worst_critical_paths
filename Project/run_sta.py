@@ -15,7 +15,7 @@ from Backwards import backward_required_times
 from SlackComputation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 3  # adjust as needed
+k = 18  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,

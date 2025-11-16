@@ -2,8 +2,16 @@ import re
 import networkx as nx
 
 #added delay between edges to simulate the delay of the gates
-DEFAULT_DELAY = 0.1  # or 1.0, or whatever "1 gate" means
-
+GATE_DELAY = {
+    "ASSIGN": 0.03,   # fake "wire/assign" delay
+    "COMB_ALWAYS": 0.05,
+    "NOT": 0.03,
+    "AND": 0.06,
+    "OR": 0.07,
+    "MUX2_NOT": 0.02,
+    "MUX2_AND": 0.09,
+    "MUX2_OR": 0.08,
+}
 def parse_verilog_to_dag(verilog_text):
     """
     Build a combinational DAG from a (possibly sequential) Verilog description.
@@ -113,7 +121,7 @@ def parse_verilog_to_dag(verilog_text):
                         continue
                     G.add_node(s)
                     G.add_node(lhs)
-                    G.add_edge(s, lhs, delay=DEFAULT_DELAY)
+                    G.add_edge(s, lhs, delay=GATE_DELAY["ASSIGN"])
             continue
 
         # Handle MUX2 module instantiations: expand to gate-level logic
@@ -143,19 +151,19 @@ def parse_verilog_to_dag(verilog_text):
             G.add_node(signal_y)
             
             # NOT gate: S -> nS
-            G.add_edge(signal_s, nS_name, delay=DEFAULT_DELAY)
+            G.add_edge(signal_s, nS_name, delay=GATE_DELAY["MUX2_NOT"])
             
             # AND gate: A, nS -> t0
-            G.add_edge(signal_a, t0_name, delay=DEFAULT_DELAY)
-            G.add_edge(nS_name, t0_name, delay=DEFAULT_DELAY)
+            G.add_edge(signal_a, t0_name, delay=GATE_DELAY["MUX2_AND"])
+            G.add_edge(nS_name, t0_name, delay=GATE_DELAY["MUX2_AND"])
             
             # AND gate: B, S -> t1
-            G.add_edge(signal_b, t1_name, delay=DEFAULT_DELAY)
-            G.add_edge(signal_s, t1_name, delay=DEFAULT_DELAY)
+            G.add_edge(signal_b, t1_name, delay=GATE_DELAY["MUX2_AND"])
+            G.add_edge(signal_s, t1_name, delay=GATE_DELAY["MUX2_AND"])
             
             # OR gate: t0, t1 -> Y
-            G.add_edge(t0_name, signal_y, delay=DEFAULT_DELAY)
-            G.add_edge(t1_name, signal_y, delay=DEFAULT_DELAY)
+            G.add_edge(t0_name, signal_y, delay=GATE_DELAY["MUX2_OR"])
+            G.add_edge(t1_name, signal_y, delay=GATE_DELAY["MUX2_OR"])
             
             continue
 
@@ -172,7 +180,7 @@ def parse_verilog_to_dag(verilog_text):
                     continue
                 G.add_node(s)
                 G.add_node(lhs)
-                G.add_edge(s, lhs, delay=DEFAULT_DELAY)
+                G.add_edge(s, lhs, delay=GATE_DELAY["ASSIGN"])
 
     return G, ff_q_nets, d_nets
 
@@ -217,7 +225,7 @@ def build_graph_from_verilog(netlist_path: str):
     # Ensure every edge has a delay attribute
     for u, v in G.edges():
         if "delay" not in G[u][v]:
-            G[u][v]["delay"] = DEFAULT_DELAY
+            G[u][v]["delay"] = GATE_DELAY["ASSIGN"]
 
     # Combinational start/end based on graph structure
     comb_start = {n for n in G.nodes() if G.in_degree(n) == 0}
