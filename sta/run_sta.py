@@ -5,6 +5,8 @@ from collections import deque
 import os
 import sys
 from typing import Iterable, Hashable, Optional, Dict
+from visualize_start_and_end_points import visualize_start_and_endpoints
+
 
 # Handle imports for both module and direct script execution
 # When run as a script, add the sta directory to path first
@@ -31,7 +33,7 @@ except ImportError:
     from slack_computation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 18  # adjust as needed
+k = 1  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,
@@ -39,8 +41,8 @@ def run_sta(
     endpoints: Iterable[Hashable],
     Tclk: float,
     *,
-    setup: float = 0.0,
-    clock_to_q: float = 0.0,
+    setup: float = 0.05,
+    clock_to_q: float = 0.05,
     startpoint_overrides: Optional[Dict[Hashable, float]] = None,
     endpoint_overrides: Optional[Dict[Hashable, float]] = None,
     delay_attr: str = "delay",
@@ -226,7 +228,7 @@ if __name__ == "__main__":
             from sta.verilog_parcer import build_graph_from_verilog
 
     # Go up one level from sta/ to STA_k_worst_critical_paths/, then into benches/
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_sequential.v")
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_adder.v")
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
@@ -281,7 +283,7 @@ if __name__ == "__main__":
 
     # Optional: visualize the timing graph with critical paths highlighted
     if critical_paths:
-        pos = nx.spring_layout(G, seed=12)
+        pos = nx.spring_layout(G, seed=32)
 
         nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
         nx.draw_networkx_edges(
@@ -327,3 +329,12 @@ if __name__ == "__main__":
 
     # Finally, animate Khan's algorithm
     animate_khan(G, interval=100)
+
+# ... after you have G, startpoints, endpoints, and maybe critical_paths
+visualize_start_and_endpoints(
+    G,
+    startpoints=startpoints,
+    endpoints=endpoints,
+    critical_paths=critical_paths,  # or None if you just want the circuit view
+    title="Vending machine circuit DAG"
+)
