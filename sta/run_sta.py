@@ -31,7 +31,7 @@ except ImportError:
     from slack_computation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 1  # adjust as needed
+k = 5  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,
@@ -223,7 +223,7 @@ if __name__ == "__main__":
             from sta.verilog_parcer import build_graph_from_verilog
 
     # Load Verilog netlist and build timing DAG
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_priority.v")
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_bar.v")
     G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
 
     delays = [G[u][v]["delay"] for u, v in G.edges()]
@@ -290,43 +290,50 @@ if __name__ == "__main__":
         print(f"  Path TNS    = {path_TNS:.6f} ns")
         print(f"  Nodes: {len(path_nodes)}, Edges: {len(path_edges)}")
 
-    # # Visualize the timing graph with critical paths highlighted
-    # if critical_paths:
-    #     pos = nx.spring_layout(G, seed=42)
+    # Visualize the timing graph with critical paths highlighted
+    if critical_paths:
+        pos = nx.spring_layout(G, seed=12)
 
-    #     nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
-    #     nx.draw_networkx_edges(
-    #         G, pos, arrows=True, arrowsize=5, edge_color="lightgray", alpha=0.3
-    #     )
+        nx.draw_networkx_nodes(G, pos, node_size=30, node_color="lightgray")
+        nx.draw_networkx_edges(
+            G, pos, arrows=True, arrowsize=5, edge_color="#e5e5e5", alpha=0.15
+        )
 
-    #     num_paths = len(critical_paths)
-    #     for i in range(num_paths - 1, -1, -1):
-    #         path_info = critical_paths[i]
-    #         path_nodes = path_info["nodes"]
-    #         path_edges = path_info["edges"]
+        num_paths = len(critical_paths)
+        # Use a colormap that spans the full spectrum (red → yellow → green → blue → purple)
+        colormap = plt.cm.get_cmap('hsv')
+        
+        for i in range(num_paths - 1, -1, -1):
+            path_info = critical_paths[i]
+            path_nodes = path_info["nodes"]
+            path_edges = path_info["edges"]
 
-    #         if num_paths == 1:
-    #             red_intensity = 1.0
-    #         else:
-    #             red_intensity = 1.0 - (i / (num_paths - 1)) * 0.6
-    #         color = (red_intensity, 0.0, 0.0)
+            # Map path index to color in the spectrum
+            # Most critical path (i=num_paths-1) gets red, least critical gets purple/blue
+            if num_paths == 1:
+                color_value = 0.0  # Red for single path
+            else:
+                # Distribute colors across the spectrum (0.0 = red, 0.17 = yellow, 0.33 = green, 0.5 = cyan, 0.67 = blue, 0.83 = purple)
+                # Reverse the mapping: most critical (high i) → red (0.0), least critical (low i) → purple (0.8)
+                color_value = (1.0 - i / (num_paths - 1)) * 0.8  # Use 0.8 to avoid wrapping back to red
+            
+            color = colormap(color_value)
 
-    #         nx.draw_networkx_nodes(
-    #             G, pos, nodelist=path_nodes, node_size=100, node_color=color
-    #         )
-    #         nx.draw_networkx_edges(
-    #             G,
-    #             pos,
-    #             edgelist=path_edges,
-    #             arrows=True,
-    #             arrowsize=5,
-    #             edge_color=color,
-    #             width=2,
-    #         )
+            nx.draw_networkx_nodes(
+                G, pos, nodelist=path_nodes, node_size=50, node_color=color
+            )
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=path_edges,
+                arrows=True,
+                arrowsize=5,
+                edge_color=color,
+                width=2,
+            )
 
-    #     nx.draw_networkx_labels(G, pos, font_size=5)
-    #     plt.title(f"Timing DAG with {len(critical_paths)} Critical Path(s)")
-    #     plt.show()
+        plt.title(f"Timing DAG with {len(critical_paths)} Critical Path(s)")
+        plt.show()
 
     # # Khan's algorithm animation
     # order_plain = Khan_topological_sort(G)

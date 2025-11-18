@@ -1,19 +1,19 @@
 import re
 import networkx as nx
 
-# Gate delay values (in nanoseconds) for different gate types
+#added delay between edges to simulate the delay of the gates
 GATE_DELAY = {
-    "ASSIGN": 0.001,   # fake "wire/assign" delay (simple pass-through)
-    "COMB_ALWAYS": 0.02,
+    "ASSIGN": 0.01,   # fake "wire/assign" delay (simple pass-through)
+    "COMB_ALWAYS": 0.01,
     "NOT": 0.01,
-    "AND": 0.02,
-    "OR": 0.04,
-    "XOR": 0.03,
-    "NAND": 0.025,    # Slightly more than AND due to inversion
-    "NOR": 0.045,     # Slightly more than OR due to inversion
-    "MUX2_NOT": 0.05,
-    "MUX2_AND": 0.07,
-    "MUX2_OR": 0.08,
+    "AND": 0.01,
+    "OR": 0.01,
+    "XOR": 0.01,
+    "NAND": 0.01,    # Slightly more than AND due to inversion
+    "NOR": 0.01,     # Slightly more than OR due to inversion
+    "MUX2_NOT": 0.01,
+    "MUX2_AND": 0.01,
+    "MUX2_OR": 0.01,
 }
 
 def detect_gate_type(expression):
@@ -272,6 +272,26 @@ def parse_verilog_to_dag(verilog_text):
                 G.add_edge(s, lhs, delay=delay)
 
     return G, ff_q_nets, d_nets
+
+# Example usage:
+if __name__ == "__main__":
+    with open("top.v", "r") as f:
+        verilog_text = f.read()
+
+    G, ff_q_nets, d_nets = parse_verilog_to_dag(verilog_text)
+
+    print("Number of nodes:", G.number_of_nodes())
+    print("Number of edges:", G.number_of_edges())
+
+    # Primary inputs = nodes with no predecessors
+    primary_inputs = [n for n in G.nodes if G.in_degree(n) == 0]
+    # Primary outputs = nodes with no successors
+    primary_outputs = [n for n in G.nodes if G.out_degree(n) == 0]
+
+    print("Primary inputs (first 10):", primary_inputs[:10])
+    print("Primary outputs:", primary_outputs)
+    print("Detected FF Q nets (state registers):", sorted(ff_q_nets))
+    print("Detected FF D nets:", sorted(d_nets))
 
 
 def build_graph_from_verilog(netlist_path: str):
