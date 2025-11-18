@@ -3,12 +3,12 @@ import networkx as nx
 
 #added delay between edges to simulate the delay of the gates
 GATE_DELAY = {
-    "ASSIGN": 0.03,   # fake "wire/assign" delay
-    "COMB_ALWAYS": 0.05,
-    "NOT": 0.03,
-    "AND": 0.06,
-    "OR": 0.07,
-    "MUX2_NOT": 0.02,
+    "ASSIGN": 0.01,   # fake "wire/assign" delay
+    "COMB_ALWAYS": 0.03,
+    "NOT": 0.01,
+    "AND": 0.02,
+    "OR": 0.04,
+    "MUX2_NOT": 0.05,
     "MUX2_AND": 0.09,
     "MUX2_OR": 0.08,
 }
@@ -41,7 +41,9 @@ def parse_verilog_to_dag(verilog_text):
     # Regex for signal names:
     #  - escaped identifiers: \something_until_whitespace  (e.g. "\a[0]")
     #  - normal identifiers:   a123, n386, f[0], etc.
-    signal_re = re.compile(r'(\\\S+|[A-Za-z_]\w*(?:\[\d+\])?)')
+    signal_re = re.compile(
+        r'(\\[^\s,;]+|[A-Za-z_]\w*(?:\[\d+\])?)'
+    )
 
     # Procedural assignments inside always blocks: "lhs = rhs;" or "lhs <= rhs;"
     proc_assign_re = re.compile(
