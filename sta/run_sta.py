@@ -4,6 +4,7 @@ from matplotlib.animation import FuncAnimation
 from collections import deque
 import os
 import sys
+import time
 from typing import Iterable, Hashable, Optional, Dict
 from visualize_start_and_end_points import visualize_start_and_endpoints
 
@@ -33,7 +34,7 @@ except ImportError:
     from slack_computation import compute_slacks
 
 # Number of critical paths to find when plotting
-k = 3  # adjust as needed
+k = 1  # adjust as needed
 
 def run_sta(
     G: nx.DiGraph,
@@ -228,7 +229,7 @@ if __name__ == "__main__":
             from sta.verilog_parcer import build_graph_from_verilog
 
     # Go up one level from sta/ to STA_k_worst_critical_paths/, then into benches/
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_ctrl.v")
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_adder.v")
 
     # The parser is expected to return:
     #   - G: nx.DiGraph representing the timing/circuit DAG
@@ -237,9 +238,18 @@ if __name__ == "__main__":
     G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
 
     delays = [G[u][v]["delay"] for u, v in G.edges()]
+    unique_delays = sorted(set(delays))
+    delay_counts = {d: delays.count(d) for d in unique_delays}
+    
     print("Min edge delay:", min(delays))
     print("Max edge delay:", max(delays))
     print("Number of edges with nonzero delay:", sum(1 for d in delays if d != 0.0))
+    print(f"Unique delays found: {len(unique_delays)}")
+    print("Delay distribution:")
+    for delay in sorted(delay_counts.keys()):
+        count = delay_counts[delay]
+        pct = 100 * count / len(delays) if delays else 0
+        print(f"  {delay:.3f} ns: {count:5d} edges ({pct:.1f}%)")
 
     print(f"Loaded DAG from {netlist_path}")
     print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
@@ -261,6 +271,9 @@ if __name__ == "__main__":
     print("=== STA results ===")
     print("WNS =", sta_res["WNS"], "TNS =", sta_res["TNS"])
 
+    # Time the critical path finding
+    print("\n=== Finding critical paths ===")
+    start_time = time.time()
     critical_paths = find_k_critical_paths(
         G,
         startpoints=startpoints,
@@ -271,6 +284,8 @@ if __name__ == "__main__":
         delay_attr="delay",
         k=k,
     )
+    elapsed_time = time.time() - start_time
+    print(f"Critical path calculation took {elapsed_time:.4f} seconds ({elapsed_time*1000:.2f} ms)")
 
     print(f"\nFound {len(critical_paths)} critical path(s)")
     for i, path_info in enumerate(critical_paths, 1):
@@ -333,7 +348,7 @@ if __name__ == "__main__":
     print("Topological order length (states):", len(order_states))
 
     # Finally, animate Khan's algorithm
-    animate_khan(G, interval=100)
+    animate_khan(G, interval=20)
 
 # # ... after you have G, startpoints, endpoints, and maybe critical_paths
 # visualize_start_and_endpoints(

@@ -3,15 +3,91 @@ import networkx as nx
 
 #added delay between edges to simulate the delay of the gates
 GATE_DELAY = {
-    "ASSIGN": 0.01,   # fake "wire/assign" delay
-    "COMB_ALWAYS": 0.03,
+    "ASSIGN": 0.001,   # fake "wire/assign" delay (simple pass-through)
+    "COMB_ALWAYS": 0.02,
     "NOT": 0.01,
     "AND": 0.02,
     "OR": 0.04,
+    "XOR": 0.03,
+    "NAND": 0.025,    # Slightly more than AND due to inversion
+    "NOR": 0.045,     # Slightly more than OR due to inversion
     "MUX2_NOT": 0.05,
-    "MUX2_AND": 0.09,
+    "MUX2_AND": 0.07,
     "MUX2_OR": 0.08,
 }
+
+def detect_gate_type(expression):
+    """
+    Analyze a Verilog expression to determine the gate type.
+    
+    Args:
+        expression: String containing the RHS of an assignment
+        
+    Returns:
+        Gate type string (e.g., "NOT", "AND", "OR", "XOR", "NAND", "NOR", "ASSIGN")
+    """
+    expr = expression.strip()
+    
+    # Count operators to understand expression complexity
+    and_count = expr.count('&')
+    or_count = expr.count('|')
+    xor_count = expr.count('^')
+    not_count = expr.count('~')
+    
+    # Check for simple NOT: ~signal (no operators except ~)
+    # Pattern: starts with ~, no &, |, ^ operators
+    if expr.startswith('~') and and_count == 0 and or_count == 0 and xor_count == 0:
+        return "NOT"
+    
+    # Pattern to match negated signals (handles escaped identifiers like \signal[0])
+    # Matches: ~signal, ~\signal[0], etc.
+    negated_signal_pattern = r'~\s*(?:\\[^\s&|^]+|[A-Za-z_]\w*(?:\[\d+\])?)'
+    
+    # Check for NOR pattern: ~a & ~b (De Morgan: ~(a | b))
+    # Pattern: multiple negated terms ANDed together, no OR operators
+    if and_count > 0 and or_count == 0 and xor_count == 0 and not_count >= 2:
+        # Find all negated signals
+        negated_signals = re.findall(negated_signal_pattern, expr)
+        # If we have 2+ negated signals and they're all connected by AND operators
+        # (not mixed with non-negated signals), it's likely a NOR
+        if len(negated_signals) >= 2:
+            # Count total signals (negated and non-negated)
+            # Pattern for any signal (negated or not)
+            all_signals_pattern = r'(?:~\s*)?(?:\\[^\s&|^]+|[A-Za-z_]\w*(?:\[\d+\])?)'
+            all_signals = re.findall(all_signals_pattern, expr)
+            # If all signals are negated, it's a NOR
+            if len(negated_signals) == len(all_signals):
+                return "NOR"
+    
+    # Check for NAND pattern: ~a | ~b (De Morgan: ~(a & b))
+    # Pattern: multiple negated terms ORed together, no AND operators
+    if or_count > 0 and and_count == 0 and xor_count == 0 and not_count >= 2:
+        negated_signals = re.findall(negated_signal_pattern, expr)
+        if len(negated_signals) >= 2:
+            all_signals_pattern = r'(?:~\s*)?(?:\\[^\s&|^]+|[A-Za-z_]\w*(?:\[\d+\])?)'
+            all_signals = re.findall(all_signals_pattern, expr)
+            # If all signals are negated, it's a NAND
+            if len(negated_signals) == len(all_signals):
+                return "NAND"
+    
+    # Check for XOR: a ^ b (no AND, no OR)
+    if xor_count > 0 and and_count == 0 and or_count == 0:
+        return "XOR"
+    
+    # Check for AND: a & b (no OR, no XOR)
+    # This includes cases like a & ~b (AND with one inverted input)
+    if and_count > 0 and or_count == 0 and xor_count == 0:
+        return "AND"
+    
+    # Check for OR: a | b (no AND, no XOR)
+    # This includes cases like a | ~b (OR with one inverted input)
+    if or_count > 0 and and_count == 0 and xor_count == 0:
+        return "OR"
+    
+    # Mixed operators or complex expression - default to ASSIGN
+    # This handles cases like (a & b) | c which would need multiple gates
+    return "ASSIGN"
+
 def parse_verilog_to_dag(verilog_text):
     """
     Build a combinational DAG from a (possibly sequential) Verilog description.
@@ -116,6 +192,12 @@ def parse_verilog_to_dag(verilog_text):
             if m:
                 lhs, op, rhs_raw = m.groups()
                 lhs = lhs.strip()
+                rhs_raw = rhs_raw.strip()
+                
+                # Detect gate type from expression
+                gate_type = detect_gate_type(rhs_raw)
+                delay = GATE_DELAY.get(gate_type, GATE_DELAY["COMB_ALWAYS"])
+                
                 rhs_signals = signal_re.findall(rhs_raw)
                 for s in rhs_signals:
                     s = s.strip()
@@ -123,7 +205,7 @@ def parse_verilog_to_dag(verilog_text):
                         continue
                     G.add_node(s)
                     G.add_node(lhs)
-                    G.add_edge(s, lhs, delay=GATE_DELAY["ASSIGN"])
+                    G.add_edge(s, lhs, delay=delay)
             continue
 
         # Handle MUX2 module instantiations: expand to gate-level logic
@@ -174,6 +256,11 @@ def parse_verilog_to_dag(verilog_text):
         if m:
             lhs_raw, rhs_raw = m.groups()
             lhs = lhs_raw.strip()
+            rhs_raw = rhs_raw.strip()
+
+            # Detect gate type from expression
+            gate_type = detect_gate_type(rhs_raw)
+            delay = GATE_DELAY.get(gate_type, GATE_DELAY["ASSIGN"])
 
             rhs_signals = signal_re.findall(rhs_raw)
             for s in rhs_signals:
@@ -182,7 +269,7 @@ def parse_verilog_to_dag(verilog_text):
                     continue
                 G.add_node(s)
                 G.add_node(lhs)
-                G.add_edge(s, lhs, delay=GATE_DELAY["ASSIGN"])
+                G.add_edge(s, lhs, delay=delay)
 
     return G, ff_q_nets, d_nets
 
