@@ -12,7 +12,7 @@ def backward_required_times(
     topo_order: List[Hashable],
     endpoints: Iterable[Hashable],
     Tclk: float,
-    setup: float = 0.0,
+    setup: float = 0.05,
     endpoint_overrides: Optional[Dict[Hashable, float]] = None,
     delay_attr: str = "delay",
 ) -> Dict[Hashable, float]:
@@ -48,13 +48,13 @@ def backward_required_times(
                 RT[e] = float(val)
 
     # Backward sweep in reverse topological order
-    for u in reversed(topo_order):
-        # For each fanout (u->v), tighten RT[u]
-        for _, v, data in G.out_edges(u, data=True):
-            d = float(data.get(delay_attr, 0.0))
-            cand = RT[v] - d
-            if cand < RT[u]:
-                RT[u] = cand
+    # for u in reversed(topo_order):
+    #     # For each fanout (u->v), tighten RT[u]
+    #     for _, v, data in G.out_edges(u, data=True):
+    #         d = float(data.get(delay_attr, 0.0))
+    #         cand = RT[v] - d
+    #         if cand < RT[u]:
+    #             RT[u] = cand
 
     return RT
 

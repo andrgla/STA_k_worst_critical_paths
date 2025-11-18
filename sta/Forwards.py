@@ -71,7 +71,7 @@ def forward_arrival_times(
 def forward_arrival_times_autotopo(
     G: nx.DiGraph,
     startpoints: Iterable[Hashable],
-    clock_to_q: float = 0.0,
+    clock_to_q: float = 0.05,
     startpoint_overrides: Optional[Dict[Hashable, float]] = None,
     delay_attr: str = "delay",
     eps: float = 1e-12,
