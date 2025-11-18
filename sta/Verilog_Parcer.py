@@ -3,17 +3,17 @@ import networkx as nx
 
 #added delay between edges to simulate the delay of the gates
 GATE_DELAY = {
-    "ASSIGN": 0.01,   # fake "wire/assign" delay (simple pass-through)
-    "COMB_ALWAYS": 0.01,
+    "ASSIGN": 0.001,   # fake "wire/assign" delay (simple pass-through)
+    "COMB_ALWAYS": 0.03,
     "NOT": 0.01,
-    "AND": 0.01,
-    "OR": 0.01,
-    "XOR": 0.01,
-    "NAND": 0.01,    # Slightly more than AND due to inversion
-    "NOR": 0.01,     # Slightly more than OR due to inversion
-    "MUX2_NOT": 0.01,
-    "MUX2_AND": 0.01,
-    "MUX2_OR": 0.01,
+    "AND": 0.02,
+    "OR": 0.04,
+    "XOR": 0.03,
+    "NAND": 0.025,    # Slightly more than AND due to inversion
+    "NOR": 0.045,     # Slightly more than OR due to inversion
+    "MUX2_NOT": 0.05,
+    "MUX2_AND": 0.09,
+    "MUX2_OR": 0.08,
 }
 
 def detect_gate_type(expression):
