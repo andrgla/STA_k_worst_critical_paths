@@ -1,13 +1,10 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from collections import deque
 import os
 import sys
 import time
 from typing import Iterable, Hashable, Optional, Dict
 from visualize_start_and_end_points import visualize_start_and_endpoints
-
 
 # Handle imports for both module and direct script execution
 # When run as a script, add the sta directory to path first
@@ -79,7 +76,6 @@ def run_sta(
         "TNS": TNS,
         "topo": topo,
     }
-
 
 def extract_single_critical_path(
     G: nx.DiGraph,
@@ -209,8 +205,7 @@ def find_k_critical_paths(
     return critical_paths
 
 if __name__ == "__main__":
-    # Build DAG from the adder circuit and run both STA and animation
-    import sys
+    # Main entry point: Build DAG from Verilog and run STA analysis
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
@@ -222,19 +217,13 @@ if __name__ == "__main__":
     try:
         from .verilog_parcer import build_graph_from_verilog
     except ImportError:
-        # When run directly as a script, sta/ is already in sys.path
         try:
             from verilog_parcer import build_graph_from_verilog
         except ImportError:
             from sta.verilog_parcer import build_graph_from_verilog
 
-    # Go up one level from sta/ to STA_k_worst_critical_paths/, then into benches/
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_adder.v")
-
-    # The parser is expected to return:
-    #   - G: nx.DiGraph representing the timing/circuit DAG
-    #   - startpoints: iterable of startpoint nodes
-    #   - endpoints: iterable of endpoint nodes
+    # Load Verilog netlist and build timing DAG
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_priority.v")
     G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
 
     delays = [G[u][v]["delay"] for u, v in G.edges()]
@@ -254,12 +243,12 @@ if __name__ == "__main__":
     print(f"Loaded DAG from {netlist_path}")
     print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
 
-    # Define simple timing parameters (adjust to your testbench)
+    # Timing parameters
     Tclk = 2.5
     setup = 0.05
     clock_to_q = 0.06
 
-    # ---- Part 1: STA and k worst critical paths ----
+    # Run STA analysis
     sta_res = run_sta(
         G,
         startpoints=startpoints,
@@ -301,60 +290,50 @@ if __name__ == "__main__":
         print(f"  Path TNS    = {path_TNS:.6f} ns")
         print(f"  Nodes: {len(path_nodes)}, Edges: {len(path_edges)}")
 
-    # Optional: visualize the timing graph with critical paths highlighted
-    if critical_paths:
-        pos = nx.spring_layout(G, seed=42)
+    # # Visualize the timing graph with critical paths highlighted
+    # if critical_paths:
+    #     pos = nx.spring_layout(G, seed=42)
 
-        nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
-        nx.draw_networkx_edges(
-            G, pos, arrows=True, arrowsize=5, edge_color="lightgray", alpha=0.3
-        )
+    #     nx.draw_networkx_nodes(G, pos, node_size=100, node_color="lightgray")
+    #     nx.draw_networkx_edges(
+    #         G, pos, arrows=True, arrowsize=5, edge_color="lightgray", alpha=0.3
+    #     )
 
-        num_paths = len(critical_paths)
-        for i in range(num_paths - 1, -1, -1):
-            path_info = critical_paths[i]
-            path_nodes = path_info["nodes"]
-            path_edges = path_info["edges"]
+    #     num_paths = len(critical_paths)
+    #     for i in range(num_paths - 1, -1, -1):
+    #         path_info = critical_paths[i]
+    #         path_nodes = path_info["nodes"]
+    #         path_edges = path_info["edges"]
 
-            if num_paths == 1:
-                red_intensity = 1.0
-            else:
-                red_intensity = 1.0 - (i / (num_paths - 1)) * 0.6
-            color = (red_intensity, 0.0, 0.0)
+    #         if num_paths == 1:
+    #             red_intensity = 1.0
+    #         else:
+    #             red_intensity = 1.0 - (i / (num_paths - 1)) * 0.6
+    #         color = (red_intensity, 0.0, 0.0)
 
-            nx.draw_networkx_nodes(
-                G, pos, nodelist=path_nodes, node_size=100, node_color=color
-            )
-            nx.draw_networkx_edges(
-                G,
-                pos,
-                edgelist=path_edges,
-                arrows=True,
-                arrowsize=5,
-                edge_color=color,
-                width=2,
-            )
+    #         nx.draw_networkx_nodes(
+    #             G, pos, nodelist=path_nodes, node_size=100, node_color=color
+    #         )
+    #         nx.draw_networkx_edges(
+    #             G,
+    #             pos,
+    #             edgelist=path_edges,
+    #             arrows=True,
+    #             arrowsize=5,
+    #             edge_color=color,
+    #             width=2,
+    #         )
 
-        nx.draw_networkx_labels(G, pos, font_size=5)
-        plt.title(f"Timing DAG with {len(critical_paths)} Critical Path(s)")
-        plt.show()
+    #     nx.draw_networkx_labels(G, pos, font_size=5)
+    #     plt.title(f"Timing DAG with {len(critical_paths)} Critical Path(s)")
+    #     plt.show()
 
-    # ---- Part 2: Khan animation on the same DAG ----
-    # Sanity check: instrumented version matches your original implementation
-    order_plain = Khan_topological_sort(G)
-    order_states, _ = Khan_with_states(G)
+    # # Khan's algorithm animation
+    # order_plain = Khan_topological_sort(G)
+    # order_states, _ = Khan_with_states(G)
 
-    print("Topological order length (Khan_topological_sort):", len(order_plain))
-    print("Topological order length (states):", len(order_states))
+    # print("\nTopological order length (Khan_topological_sort):", len(order_plain))
+    # print("Topological order length (states):", len(order_states))
 
-    # Finally, animate Khan's algorithm
-    animate_khan(G, interval=20)
-
-# # ... after you have G, startpoints, endpoints, and maybe critical_paths
-# visualize_start_and_endpoints(
-#     G,
-#     startpoints=startpoints,
-#     endpoints=endpoints,
-#     critical_paths=critical_paths,  # or None if you just want the circuit view
-#     title="Vending machine circuit DAG"
-# )
+    # # Animate Khan's algorithm
+    # animate_khan(G, interval=20)

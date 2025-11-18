@@ -9,7 +9,8 @@ except ImportError:
     from Khan import Khan_topological_sort
 
 def Khan_with_states(G: nx.DiGraph, skip_intermediate=True):
-    """Run Khan's algorithm but record all intermediate states.
+    """
+    Run Khan's algorithm but record all intermediate states.
 
     Each state dictionary contains:
       - "step": step index
@@ -18,8 +19,16 @@ def Khan_with_states(G: nx.DiGraph, skip_intermediate=True):
       - "current": node being processed at this step (or None)
     
     Args:
+        G: NetworkX DiGraph to sort
         skip_intermediate: If True, only record states when a node is processed
                           (skips the "after updating" states to reduce frames)
+                          
+    Returns:
+        Tuple of (topological_order, list_of_states)
+        
+    Raises:
+        TypeError: If graph is not directed
+        nx.NetworkXUnfeasible: If graph contains cycles
     """
     if not G.is_directed():
         raise TypeError("Graph must be a directed graph (DiGraph).")
@@ -82,12 +91,17 @@ def Khan_with_states(G: nx.DiGraph, skip_intermediate=True):
 
 def animate_khan(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100, 
                  show_labels: bool = True):
-    """Create an animation of Khan's algorithm on graph G.
+    """
+    Create an animation of Khan's algorithm on graph G.
 
     Args:
+        G: NetworkX DiGraph to animate
         interval: Time between frames in milliseconds
         max_nodes: If graph has more nodes, subsample or use simpler visualization
         show_labels: Whether to show node labels (slower if True)
+        
+    Returns:
+        FuncAnimation object
     """
     # For very large graphs, warn user
     if len(G) > max_nodes:
@@ -158,8 +172,6 @@ def animate_khan(G: nx.DiGraph, interval: int = 10, max_nodes: int = 100,
             else:
                 colors.append("lightgray")
         all_colors.append(colors)
-
-    # (get_node_colors helper removed)
 
     def init():
         nonlocal node_collection, text_annotation

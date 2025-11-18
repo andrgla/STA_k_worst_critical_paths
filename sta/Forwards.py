@@ -77,7 +77,9 @@ def forward_arrival_times_autotopo(
     eps: float = 1e-12,
 ) -> Tuple[Dict[Hashable, float], Dict[Hashable, List[Hashable]]]:
     """
-    Convenience wrapper that computes Khan topo order internally.
+    Convenience wrapper that computes topological order internally.
+    
+    See forward_arrival_times() for parameter descriptions.
     """
     topo = Khan_topological_sort(G)
     return forward_arrival_times(

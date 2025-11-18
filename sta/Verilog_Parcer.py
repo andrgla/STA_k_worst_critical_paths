@@ -1,7 +1,7 @@
 import re
 import networkx as nx
 
-#added delay between edges to simulate the delay of the gates
+# Gate delay values (in nanoseconds) for different gate types
 GATE_DELAY = {
     "ASSIGN": 0.001,   # fake "wire/assign" delay (simple pass-through)
     "COMB_ALWAYS": 0.02,
@@ -272,26 +272,6 @@ def parse_verilog_to_dag(verilog_text):
                 G.add_edge(s, lhs, delay=delay)
 
     return G, ff_q_nets, d_nets
-
-# Example usage:
-if __name__ == "__main__":
-    with open("top.v", "r") as f:
-        verilog_text = f.read()
-
-    G, ff_q_nets, d_nets = parse_verilog_to_dag(verilog_text)
-
-    print("Number of nodes:", G.number_of_nodes())
-    print("Number of edges:", G.number_of_edges())
-
-    # Primary inputs = nodes with no predecessors
-    primary_inputs = [n for n in G.nodes if G.in_degree(n) == 0]
-    # Primary outputs = nodes with no successors
-    primary_outputs = [n for n in G.nodes if G.out_degree(n) == 0]
-
-    print("Primary inputs (first 10):", primary_inputs[:10])
-    print("Primary outputs:", primary_outputs)
-    print("Detected FF Q nets (state registers):", sorted(ff_q_nets))
-    print("Detected FF D nets:", sorted(d_nets))
 
 
 def build_graph_from_verilog(netlist_path: str):

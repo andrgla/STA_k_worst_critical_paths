@@ -68,7 +68,9 @@ def backward_required_times_autotopo(
     delay_attr: str = "delay",
 ) -> Dict[Hashable, float]:
     """
-    Convenience wrapper that computes Khan topo order internally.
+    Convenience wrapper that computes topological order internally.
+    
+    See backward_required_times() for parameter descriptions.
     """
     topo = Khan_topological_sort(G)
     return backward_required_times(
