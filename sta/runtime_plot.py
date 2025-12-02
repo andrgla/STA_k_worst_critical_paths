@@ -30,7 +30,7 @@ except ImportError:
 
 
 # Values of k to test
-K_VALUES: List[int] = list(range(1, 6)) + list(range(7, 50, 1))
+K_VALUES: List[int] = list(range(1, 6)) + list(range(7, 50, 5))
 
 # Benchmarks to test (Verilog filenames without extension)
 BENCHMARKS: Dict[str, str] = {

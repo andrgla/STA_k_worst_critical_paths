@@ -1,4 +1,4 @@
-# STA (Static Timing Analysis) Tool
+# STA (Static Timing Analysis) Tool 🌅
 
 A Python package for performing static timing analysis on Verilog netlists, including finding k worst critical paths with gate-level delay modeling.
 

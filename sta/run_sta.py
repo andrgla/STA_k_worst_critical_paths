@@ -223,7 +223,7 @@ if __name__ == "__main__":
             from sta.verilog_parcer import build_graph_from_verilog
 
     # Load Verilog netlist and build timing DAG
-    netlist_path = os.path.join(project_root, "benches", "Test_circuit_bar.v")
+    netlist_path = os.path.join(project_root, "benches", "Test_circuit_priority.v")
     G, startpoints, endpoints = build_graph_from_verilog(netlist_path)
 
     delays = [G[u][v]["delay"] for u, v in G.edges()]
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     print(f"Nodes: {len(G.nodes())}, Edges: {len(G.edges())}")
 
     # Timing parameters
-    Tclk = 2.5
+    Tclk = 3
     setup = 0.05
     clock_to_q = 0.06
 
@@ -292,7 +292,7 @@ if __name__ == "__main__":
 
     # Visualize the timing graph with critical paths highlighted
     if critical_paths:
-        pos = nx.spring_layout(G, seed=12)
+        pos = nx.spring_layout(G, seed=42)
 
         nx.draw_networkx_nodes(G, pos, node_size=30, node_color="lightgray")
         nx.draw_networkx_edges(
